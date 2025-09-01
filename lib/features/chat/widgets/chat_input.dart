@@ -182,10 +182,10 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
             final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
             buffer.writeln('Current date and time: $now');
             buffer.writeln('Use only the following web search results to answer:');
-            for (final result in results.take(25)) {
+            for (final result in results.take(20)) {
               final title = result['title'] ?? '';
               final url = result['url'] ?? '';
-              final snippet = result['snippet'] ?? '';
+              final snippet = result['description'] ?? '';
               buffer.writeln('- $title\n$url\n$snippet');
             }
             buffer.writeln();

@@ -166,7 +166,27 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                 onPressed: () {
                   Navigator.of(context).pop();
                   Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
+                    PageRouteBuilder(
+                      pageBuilder: (_, __, ___) => const LoginPage(),
+                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                        const begin = Offset(-1.0, 0.0);
+                        const end = Offset.zero;
+                        const curve = Curves.easeOutCubic;
+
+                        final tween = Tween(begin: begin, end: end).chain(
+                          CurveTween(curve: curve),
+                        );
+
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
+                            position: animation.drive(tween),
+                            child: child,
+                          ),
+                        );
+                      },
+                      transitionDuration: const Duration(milliseconds: 150),
+                    ),
                   );
                 },
                 child: const Text('Go to Login'),
@@ -273,7 +293,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                               children: [
                                 TextSpan(
                                   text: 'AhamAI',
-                                  style: GoogleFonts.amaranth(
+                                  style: GoogleFonts.sourceCodePro(
                                     fontSize: 36,
                                     fontWeight: FontWeight.w600,
                                     color: theme.colorScheme.primary,
@@ -433,7 +453,29 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                             ),
                             GestureDetector(
                               onTap: () {
-                                Navigator.of(context).pop();
+                                Navigator.of(context).pushReplacement(
+                                  PageRouteBuilder(
+                                    pageBuilder: (_, __, ___) => const LoginPage(),
+                                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                      const begin = Offset(-1.0, 0.0);
+                                      const end = Offset.zero;
+                                      const curve = Curves.easeOutCubic;
+
+                                      final tween = Tween(begin: begin, end: end).chain(
+                                        CurveTween(curve: curve),
+                                      );
+
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: animation.drive(tween),
+                                          child: child,
+                                        ),
+                                      );
+                                    },
+                                    transitionDuration: const Duration(milliseconds: 150),
+                                  ),
+                                );
                               },
                               child: Text(
                                 'Sign In',

@@ -251,7 +251,7 @@ class ApiService {
     while (attempts < maxAttempts) {
       try {
         final apiKey = _getCurrentBraveApiKey();
-        final url = 'https://api.search.brave.com/res/v1/web/search?q=${Uri.encodeComponent(query)}&count=25';
+        final url = 'https://api.search.brave.com/res/v1/web/search?q=${Uri.encodeComponent(query)}&count=20';
         
         final response = await http.get(
           Uri.parse(url),

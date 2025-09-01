@@ -1291,7 +1291,7 @@ class _AboutBottomSheetState extends State<_AboutBottomSheet> {
                               children: [
                                 TextSpan(
                                   text: 'A',
-                                  style: GoogleFonts.amaranth(
+                                  style: GoogleFonts.sourceCodePro(
                                     fontSize: 32,
                                     fontWeight: FontWeight.w600,
                                     color: theme.colorScheme.primary,
@@ -1308,7 +1308,7 @@ class _AboutBottomSheetState extends State<_AboutBottomSheet> {
                           children: [
                             TextSpan(
                               text: 'AhamAI',
-                              style: GoogleFonts.amaranth(
+                              style: GoogleFonts.sourceCodePro(
                                 fontSize: 28,
                                 fontWeight: FontWeight.w600,
                                 color: theme.colorScheme.primary,
@@ -1386,9 +1386,11 @@ class _AboutBottomSheetState extends State<_AboutBottomSheet> {
                 _buildFeatureItem(context, 'Flashcards & quiz'),
                 _buildFeatureItem(context, 'Custom themes'),
                 _buildFeatureItem(context, 'More...'),
-                
+
                 const SizedBox(height: 24),
-                
+                const Divider(),
+                const SizedBox(height: 24),
+
                 // Developer Info - Compact
                 Row(
                   children: [
