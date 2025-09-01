@@ -7,11 +7,12 @@ import 'dart:async';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../core/services/speech_service.dart';
-
 import '../../../core/services/prompt_enhancer_service.dart';
 import '../../../core/services/ad_service.dart';
 import '../../../core/services/pdf_service.dart';
+import '../../../core/services/api_service.dart';
 import '../../../shared/widgets/prompt_enhancer.dart';
 
 class ChatInput extends StatefulWidget {
@@ -66,6 +67,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
   bool _chartGenerationMode = false;
   bool _flashcardGenerationMode = false;
   bool _quizGenerationMode = false;
+  bool _webSearchMode = false;
   String? _pendingImageData;
   Timer? _typingTimer;
   
@@ -147,20 +149,20 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
     }
   }
 
-  void _handleSend() {
+  Future<void> _handleSend() async {
     if (!_canSend) return;
-    
+
     String message = _controller.text.trim();
     if (message.isEmpty) return;
 
     _controller.clear();
     _updateSendButton();
-    
+
     // If there's hidden file content, use the file upload callback
     if (_hiddenFileContent.isNotEmpty && widget.onFileUpload != null) {
       // Use the file upload callback to send both file names and content
       widget.onFileUpload!(_uploadedFileNames, _hiddenFileContent);
-      
+
       // Clear hidden content after sending
       _hiddenFileContent = '';
       _uploadedFileNames = [];
@@ -169,9 +171,50 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       widget.onVisionAnalysis!(message, _pendingImageData!);
       _pendingImageData = null; // Clear after use
     } else {
+      final originalQuery = message;
+      final buffer = StringBuffer();
+
+      if (_webSearchMode) {
+        try {
+          final searchData = await ApiService.searchWeb(query: message);
+          final results = searchData?['web']?['results'] as List<dynamic>?;
+          if (results != null && results.isNotEmpty) {
+            final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+            buffer.writeln('Current date and time: $now');
+            buffer.writeln('Use only the following web search results to answer:');
+            for (final result in results.take(25)) {
+              final title = result['title'] ?? '';
+              final url = result['url'] ?? '';
+              final snippet = result['snippet'] ?? '';
+              buffer.writeln('- $title\n$url\n$snippet');
+            }
+            buffer.writeln();
+          }
+        } catch (_) {}
+      }
+
+      final urlRegExp = RegExp(r'(https?:\/\/[^\s]+)');
+      final urls = urlRegExp.allMatches(originalQuery).map((m) => m.group(0)!).toList();
+      if (urls.isNotEmpty) {
+        for (final url in urls) {
+          try {
+            final content = await ApiService.scrapeWebsite(url);
+            if (content != null && content.isNotEmpty) {
+              final snippet = content.length > 2000 ? content.substring(0, 2000) : content;
+              buffer.writeln('Content from $url:\n$snippet\n');
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (buffer.isNotEmpty) {
+        buffer.writeln('User query: $originalQuery');
+        message = buffer.toString();
+      }
+
       widget.onSendMessage(message);
     }
-    
+
     HapticFeedback.lightImpact();
   }
 
@@ -298,7 +341,9 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
                                                   ? 'What topic for flashcards?'
                                                   : _quizGenerationMode
                                                       ? 'What topic for the quiz?'
-                      : 'Type your message...')
+                                                      : _webSearchMode
+                                                          ? 'Ask anything with web search...'
+                                                          : 'Type your message...')
                           : 'Select a model to start chatting',
                       hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
@@ -498,6 +543,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
         chartGenerationMode: _chartGenerationMode,
         flashcardGenerationMode: _flashcardGenerationMode,
         quizGenerationMode: _quizGenerationMode,
+        webSearchMode: _webSearchMode,
         onImageUpload: () async {
           Navigator.pop(context);
           await AdService.instance.onExtensionFeatureUsed();
@@ -518,6 +564,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -536,6 +583,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -549,6 +597,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -562,6 +611,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _presentationGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -575,6 +625,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _presentationGenerationMode = false;
               _chartGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -588,6 +639,21 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _presentationGenerationMode = false;
               _chartGenerationMode = false;
               _flashcardGenerationMode = false;
+              _webSearchMode = false;
+            }
+          });
+          Navigator.pop(context);
+        },
+        onWebSearchToggle: (enabled) {
+          setState(() {
+            _webSearchMode = enabled;
+            if (enabled) {
+              _imageGenerationMode = false;
+              _diagramGenerationMode = false;
+              _presentationGenerationMode = false;
+              _chartGenerationMode = false;
+              _flashcardGenerationMode = false;
+              _quizGenerationMode = false;
             }
           });
           Navigator.pop(context);
@@ -764,12 +830,13 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
   }
 
   bool _isAnyExtensionActive() {
-    return _imageGenerationMode || 
-           _diagramGenerationMode || 
-           _presentationGenerationMode || 
-           _chartGenerationMode || 
-           _flashcardGenerationMode || 
-           _quizGenerationMode;
+    return _imageGenerationMode ||
+           _diagramGenerationMode ||
+           _presentationGenerationMode ||
+           _chartGenerationMode ||
+           _flashcardGenerationMode ||
+           _quizGenerationMode ||
+           _webSearchMode;
   }
   
   void _clearAllExtensions() {
@@ -780,6 +847,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _chartGenerationMode = false;
       _flashcardGenerationMode = false;
       _quizGenerationMode = false;
+      _webSearchMode = false;
     });
     _updateSendButton();
   }
@@ -838,6 +906,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
   final bool chartGenerationMode;
   final bool flashcardGenerationMode;
   final bool quizGenerationMode;
+  final bool webSearchMode;
   final VoidCallback onImageUpload;
   final VoidCallback onPdfUpload;
   final Function(bool) onImageModeToggle;
@@ -846,6 +915,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
   final Function(bool) onChartToggle;
   final Function(bool) onFlashcardToggle;
   final Function(bool) onQuizToggle;
+  final Function(bool) onWebSearchToggle;
   final VoidCallback onEnhancePrompt;
 
   const _ExtensionsBottomSheet({
@@ -855,6 +925,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
     this.chartGenerationMode = false,
     this.flashcardGenerationMode = false,
     this.quizGenerationMode = false,
+    this.webSearchMode = false,
     required this.onImageUpload,
     required this.onPdfUpload,
     required this.onImageModeToggle,
@@ -863,6 +934,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
     required this.onChartToggle,
     required this.onFlashcardToggle,
     required this.onQuizToggle,
+    required this.onWebSearchToggle,
     required this.onEnhancePrompt,
   });
 
@@ -913,7 +985,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                 
                 const SizedBox(height: 12),
                 
-                // Second row - Enhance Prompt, Image generation, and Diagram
+                // Second row - Enhance Prompt, Image generation, Web Search
                 Row(
                   children: [
                     Expanded(
@@ -936,6 +1008,23 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _ExtensionTile(
+                        icon: CupertinoIcons.search,
+                        title: 'Web Search',
+                        subtitle: '',
+                        isToggled: webSearchMode,
+                        onTap: () => onWebSearchToggle(!webSearchMode),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Third row - Diagram, Chart, Presentation
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ExtensionTile(
                         icon: CupertinoIcons.graph_square,
                         title: 'Diagram',
                         subtitle: '',
@@ -943,14 +1032,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                         onTap: () => onDiagramToggle(!diagramGenerationMode),
                       ),
                     ),
-                  ],
-                ),
-                
-                const SizedBox(height: 10),
-                
-                // Third row - Chart, Presentation, Flashcards
-                Row(
-                  children: [
+                    const SizedBox(width: 10),
                     Expanded(
                       child: _ExtensionTile(
                         icon: CupertinoIcons.chart_bar_alt_fill,
@@ -970,7 +1052,14 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                         onTap: () => onPresentationToggle(!presentationGenerationMode),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Fourth row - Flashcards and Quiz
+                Row(
+                  children: [
                     Expanded(
                       child: _ExtensionTile(
                         icon: CupertinoIcons.square_on_square,
@@ -980,14 +1069,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                         onTap: () => onFlashcardToggle(!flashcardGenerationMode),
                       ),
                     ),
-                  ],
-                ),
-                
-                const SizedBox(height: 10),
-                
-                // Fourth row - Quiz only
-                Row(
-                  children: [
+                    const SizedBox(width: 10),
                     Expanded(
                       child: _ExtensionTile(
                         icon: CupertinoIcons.question_circle,
@@ -998,9 +1080,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(child: Container()), // Empty space for alignment
-                    const SizedBox(width: 10),
-                    Expanded(child: Container()), // Empty space for alignment
+                    Expanded(child: Container()),
                   ],
                 ),
               ],

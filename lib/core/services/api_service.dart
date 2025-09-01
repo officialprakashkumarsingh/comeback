@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 class ApiService {
   static const String baseUrl = 'https://ahamai-api.officialprakashkrsingh.workers.dev';
@@ -99,14 +100,16 @@ class ApiService {
   }) async {
     try {
       final messages = <Map<String, dynamic>>[];
-      
-      // Add system prompt if provided
+
+      final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+      String finalPrompt = 'Current date and time: $now';
       if (systemPrompt != null && systemPrompt.isNotEmpty) {
-        messages.add({
-          'role': 'system',
-          'content': systemPrompt,
-        });
+        finalPrompt = '$systemPrompt\n\n$finalPrompt';
       }
+      messages.add({
+        'role': 'system',
+        'content': finalPrompt,
+      });
       
       // Add conversation history
       if (conversationHistory != null) {
@@ -291,6 +294,28 @@ class ApiService {
       }
     }
     
+    return null;
+  }
+
+  static Future<String?> scrapeWebsite(String url) async {
+    try {
+      final target = 'https://scrap.ytansh038.workers.dev/?url=${Uri.encodeComponent(url)}';
+      final response = await http
+          .get(Uri.parse(target))
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode == 200) {
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map && data['content'] is String) return data['content'];
+          if (data is Map && data['result'] is String) return data['result'];
+        } catch (_) {}
+        return response.body;
+      } else {
+        print('Website scraper error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Website scraper exception: $e');
+    }
     return null;
   }
 }
