@@ -691,8 +691,8 @@ class _ProfilePageState extends State<ProfilePage> with TickerProviderStateMixin
   }
 
   Widget _buildMultipleModelsSection() {
-    return ListenableBuilder(
-      listenable: ModelService.instance,
+    return AnimatedBuilder(
+      animation: ModelService.instance,
       builder: (context, _) {
         final modelService = ModelService.instance;
         
@@ -849,8 +849,8 @@ class _ProfilePageState extends State<ProfilePage> with TickerProviderStateMixin
   }
 
   Widget _buildMultipleImageModelsSection() {
-    return ListenableBuilder(
-      listenable: ImageService.instance,
+    return AnimatedBuilder(
+      animation: ImageService.instance,
       builder: (context, _) {
         final imageService = ImageService.instance;
         
@@ -1041,8 +1041,8 @@ class _ImageModelSelectorSheet extends StatelessWidget {
           
           // Models list
           Expanded(
-            child: ListenableBuilder(
-              listenable: ImageService.instance,
+            child: AnimatedBuilder(
+              animation: ImageService.instance,
               builder: (context, _) {
                 final imageService = ImageService.instance;
                 

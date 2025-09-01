@@ -127,8 +127,8 @@ class _MessageModeSelectorState extends State<MessageModeSelector>
   }
 
   Widget _buildModesList() {
-    return ListenableBuilder(
-      listenable: MessageModeService.instance,
+    return AnimatedBuilder(
+      animation: MessageModeService.instance,
       builder: (context, _) {
         final modes = MessageModeService.instance.modes;
         final selectedMode = MessageModeService.instance.selectedMode;

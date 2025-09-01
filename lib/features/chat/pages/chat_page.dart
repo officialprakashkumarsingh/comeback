@@ -149,8 +149,8 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: ModelService.instance,
+    return AnimatedBuilder(
+      animation: ModelService.instance,
       builder: (context, _) {
         final modelService = ModelService.instance;
         

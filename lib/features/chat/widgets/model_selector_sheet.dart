@@ -56,8 +56,8 @@ class _ModelSelectorBottomSheetState extends State<ModelSelectorBottomSheet> {
           
           // Models list
           Expanded(
-            child: ListenableBuilder(
-              listenable: ModelService.instance,
+            child: AnimatedBuilder(
+              animation: ModelService.instance,
               builder: (context, _) {
                 final modelService = ModelService.instance;
                 
