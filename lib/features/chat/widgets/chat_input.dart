@@ -171,12 +171,14 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       widget.onVisionAnalysis!(message, _pendingImageData!);
       _pendingImageData = null; // Clear after use
     } else {
+      final originalQuery = message;
+      final buffer = StringBuffer();
+
       if (_webSearchMode) {
         try {
           final searchData = await ApiService.searchWeb(query: message);
           final results = searchData?['web']?['results'] as List<dynamic>?;
           if (results != null && results.isNotEmpty) {
-            final buffer = StringBuffer();
             final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
             buffer.writeln('Current date and time: $now');
             buffer.writeln('Use only the following web search results to answer:');
@@ -187,11 +189,29 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               buffer.writeln('- $title\n$url\n$snippet');
             }
             buffer.writeln();
-            buffer.writeln('User query: $message');
-            message = buffer.toString();
           }
         } catch (_) {}
       }
+
+      final urlRegExp = RegExp(r'(https?:\/\/[^\s]+)');
+      final urls = urlRegExp.allMatches(originalQuery).map((m) => m.group(0)!).toList();
+      if (urls.isNotEmpty) {
+        for (final url in urls) {
+          try {
+            final content = await ApiService.scrapeWebsite(url);
+            if (content != null && content.isNotEmpty) {
+              final snippet = content.length > 2000 ? content.substring(0, 2000) : content;
+              buffer.writeln('Content from $url:\n$snippet\n');
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (buffer.isNotEmpty) {
+        buffer.writeln('User query: $originalQuery');
+        message = buffer.toString();
+      }
+
       widget.onSendMessage(message);
     }
 
@@ -854,9 +874,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
     if (_quizGenerationMode) {
       return Icons.quiz_outlined;
     }
-    if (_webSearchMode) {
-      return Icons.public_outlined;
-    }
     return Icons.arrow_upward_rounded;
   }
 
@@ -968,7 +985,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                 
                 const SizedBox(height: 12),
                 
-                // Second row - Enhance Prompt, Image generation, and Diagram
+                // Second row - Enhance Prompt, Image generation, Web Search
                 Row(
                   children: [
                     Expanded(
@@ -991,6 +1008,23 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _ExtensionTile(
+                        icon: CupertinoIcons.search,
+                        title: 'Web Search',
+                        subtitle: '',
+                        isToggled: webSearchMode,
+                        onTap: () => onWebSearchToggle(!webSearchMode),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Third row - Diagram, Chart, Presentation
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ExtensionTile(
                         icon: CupertinoIcons.graph_square,
                         title: 'Diagram',
                         subtitle: '',
@@ -998,14 +1032,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                         onTap: () => onDiagramToggle(!diagramGenerationMode),
                       ),
                     ),
-                  ],
-                ),
-                
-                const SizedBox(height: 10),
-                
-                // Third row - Chart, Presentation, Flashcards
-                Row(
-                  children: [
+                    const SizedBox(width: 10),
                     Expanded(
                       child: _ExtensionTile(
                         icon: CupertinoIcons.chart_bar_alt_fill,
@@ -1025,7 +1052,14 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                         onTap: () => onPresentationToggle(!presentationGenerationMode),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Fourth row - Flashcards and Quiz
+                Row(
+                  children: [
                     Expanded(
                       child: _ExtensionTile(
                         icon: CupertinoIcons.square_on_square,
@@ -1035,14 +1069,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                         onTap: () => onFlashcardToggle(!flashcardGenerationMode),
                       ),
                     ),
-                  ],
-                ),
-                
-                const SizedBox(height: 10),
-                
-                // Fourth row - Quiz and Web Search
-                Row(
-                  children: [
+                    const SizedBox(width: 10),
                     Expanded(
                       child: _ExtensionTile(
                         icon: CupertinoIcons.question_circle,
@@ -1053,17 +1080,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: _ExtensionTile(
-                        icon: CupertinoIcons.search,
-                        title: 'Web Search',
-                        subtitle: '',
-                        isToggled: webSearchMode,
-                        onTap: () => onWebSearchToggle(!webSearchMode),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(child: Container()), // Empty space for alignment
+                    Expanded(child: Container()),
                   ],
                 ),
               ],
