@@ -7,11 +7,12 @@ import 'dart:async';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../core/services/speech_service.dart';
-
 import '../../../core/services/prompt_enhancer_service.dart';
 import '../../../core/services/ad_service.dart';
 import '../../../core/services/pdf_service.dart';
+import '../../../core/services/api_service.dart';
 import '../../../shared/widgets/prompt_enhancer.dart';
 
 class ChatInput extends StatefulWidget {
@@ -66,6 +67,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
   bool _chartGenerationMode = false;
   bool _flashcardGenerationMode = false;
   bool _quizGenerationMode = false;
+  bool _webSearchMode = false;
   String? _pendingImageData;
   Timer? _typingTimer;
   
@@ -147,20 +149,20 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
     }
   }
 
-  void _handleSend() {
+  Future<void> _handleSend() async {
     if (!_canSend) return;
-    
+
     String message = _controller.text.trim();
     if (message.isEmpty) return;
 
     _controller.clear();
     _updateSendButton();
-    
+
     // If there's hidden file content, use the file upload callback
     if (_hiddenFileContent.isNotEmpty && widget.onFileUpload != null) {
       // Use the file upload callback to send both file names and content
       widget.onFileUpload!(_uploadedFileNames, _hiddenFileContent);
-      
+
       // Clear hidden content after sending
       _hiddenFileContent = '';
       _uploadedFileNames = [];
@@ -169,9 +171,30 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       widget.onVisionAnalysis!(message, _pendingImageData!);
       _pendingImageData = null; // Clear after use
     } else {
+      if (_webSearchMode) {
+        try {
+          final searchData = await ApiService.searchWeb(query: message);
+          final results = searchData?['web']?['results'] as List<dynamic>?;
+          if (results != null && results.isNotEmpty) {
+            final buffer = StringBuffer();
+            final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+            buffer.writeln('Current date and time: $now');
+            buffer.writeln('Use only the following web search results to answer:');
+            for (final result in results.take(25)) {
+              final title = result['title'] ?? '';
+              final url = result['url'] ?? '';
+              final snippet = result['snippet'] ?? '';
+              buffer.writeln('- $title\n$url\n$snippet');
+            }
+            buffer.writeln();
+            buffer.writeln('User query: $message');
+            message = buffer.toString();
+          }
+        } catch (_) {}
+      }
       widget.onSendMessage(message);
     }
-    
+
     HapticFeedback.lightImpact();
   }
 
@@ -298,7 +321,9 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
                                                   ? 'What topic for flashcards?'
                                                   : _quizGenerationMode
                                                       ? 'What topic for the quiz?'
-                      : 'Type your message...')
+                                                      : _webSearchMode
+                                                          ? 'Ask anything with web search...'
+                                                          : 'Type your message...')
                           : 'Select a model to start chatting',
                       hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
@@ -498,6 +523,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
         chartGenerationMode: _chartGenerationMode,
         flashcardGenerationMode: _flashcardGenerationMode,
         quizGenerationMode: _quizGenerationMode,
+        webSearchMode: _webSearchMode,
         onImageUpload: () async {
           Navigator.pop(context);
           await AdService.instance.onExtensionFeatureUsed();
@@ -518,6 +544,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -536,6 +563,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -549,6 +577,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -562,6 +591,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _presentationGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -575,6 +605,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _presentationGenerationMode = false;
               _chartGenerationMode = false;
               _quizGenerationMode = false;
+              _webSearchMode = false;
             }
           });
           Navigator.pop(context);
@@ -588,6 +619,21 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _presentationGenerationMode = false;
               _chartGenerationMode = false;
               _flashcardGenerationMode = false;
+              _webSearchMode = false;
+            }
+          });
+          Navigator.pop(context);
+        },
+        onWebSearchToggle: (enabled) {
+          setState(() {
+            _webSearchMode = enabled;
+            if (enabled) {
+              _imageGenerationMode = false;
+              _diagramGenerationMode = false;
+              _presentationGenerationMode = false;
+              _chartGenerationMode = false;
+              _flashcardGenerationMode = false;
+              _quizGenerationMode = false;
             }
           });
           Navigator.pop(context);
@@ -764,12 +810,13 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
   }
 
   bool _isAnyExtensionActive() {
-    return _imageGenerationMode || 
-           _diagramGenerationMode || 
-           _presentationGenerationMode || 
-           _chartGenerationMode || 
-           _flashcardGenerationMode || 
-           _quizGenerationMode;
+    return _imageGenerationMode ||
+           _diagramGenerationMode ||
+           _presentationGenerationMode ||
+           _chartGenerationMode ||
+           _flashcardGenerationMode ||
+           _quizGenerationMode ||
+           _webSearchMode;
   }
   
   void _clearAllExtensions() {
@@ -780,6 +827,7 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _chartGenerationMode = false;
       _flashcardGenerationMode = false;
       _quizGenerationMode = false;
+      _webSearchMode = false;
     });
     _updateSendButton();
   }
@@ -805,6 +853,9 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
     }
     if (_quizGenerationMode) {
       return Icons.quiz_outlined;
+    }
+    if (_webSearchMode) {
+      return Icons.public_outlined;
     }
     return Icons.arrow_upward_rounded;
   }
@@ -838,6 +889,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
   final bool chartGenerationMode;
   final bool flashcardGenerationMode;
   final bool quizGenerationMode;
+  final bool webSearchMode;
   final VoidCallback onImageUpload;
   final VoidCallback onPdfUpload;
   final Function(bool) onImageModeToggle;
@@ -846,6 +898,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
   final Function(bool) onChartToggle;
   final Function(bool) onFlashcardToggle;
   final Function(bool) onQuizToggle;
+  final Function(bool) onWebSearchToggle;
   final VoidCallback onEnhancePrompt;
 
   const _ExtensionsBottomSheet({
@@ -855,6 +908,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
     this.chartGenerationMode = false,
     this.flashcardGenerationMode = false,
     this.quizGenerationMode = false,
+    this.webSearchMode = false,
     required this.onImageUpload,
     required this.onPdfUpload,
     required this.onImageModeToggle,
@@ -863,6 +917,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
     required this.onChartToggle,
     required this.onFlashcardToggle,
     required this.onQuizToggle,
+    required this.onWebSearchToggle,
     required this.onEnhancePrompt,
   });
 
@@ -985,7 +1040,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                 
                 const SizedBox(height: 10),
                 
-                // Fourth row - Quiz only
+                // Fourth row - Quiz and Web Search
                 Row(
                   children: [
                     Expanded(
@@ -998,7 +1053,15 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(child: Container()), // Empty space for alignment
+                    Expanded(
+                      child: _ExtensionTile(
+                        icon: CupertinoIcons.search,
+                        title: 'Web Search',
+                        subtitle: '',
+                        isToggled: webSearchMode,
+                        onTap: () => onWebSearchToggle(!webSearchMode),
+                      ),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(child: Container()), // Empty space for alignment
                   ],
