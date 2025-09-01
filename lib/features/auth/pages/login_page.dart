@@ -221,7 +221,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               children: [
                                 TextSpan(
                                   text: 'AhamAI',
-                                  style: GoogleFonts.amaranth(
+                                  style: GoogleFonts.sourceCodePro(
                                     fontSize: 36,
                                     fontWeight: FontWeight.w600,
                                     color: theme.colorScheme.primary,
@@ -354,7 +354,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                         ),
                                       );
                                     },
-                                    transitionDuration: const Duration(milliseconds: 200),
+                                    transitionDuration: const Duration(milliseconds: 150),
                                   ),
                                 );
                               },

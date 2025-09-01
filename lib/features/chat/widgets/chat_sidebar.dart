@@ -17,33 +17,21 @@ class ChatSidebar extends StatefulWidget {
   State<ChatSidebar> createState() => _ChatSidebarState();
 }
 
-class _ChatSidebarState extends State<ChatSidebar> with SingleTickerProviderStateMixin {
+class _ChatSidebarState extends State<ChatSidebar> {
   final _historyService = ChatHistoryService.instance;
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
   String _searchQuery = '';
   bool _isSearching = false;
   bool _isLoadingMessages = false;
-  
-  // Animation controller for staggered list
-  late AnimationController _listAnimationController;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize animation controller
-    _listAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-
     _historyService.addListener(_onHistoryChanged);
     _loadHistory();
     _searchController.addListener(_onSearchChanged);
-
-    // Start the animation when the widget is built
-    _listAnimationController.forward();
   }
   
   @override
@@ -52,7 +40,6 @@ class _ChatSidebarState extends State<ChatSidebar> with SingleTickerProviderStat
     _searchController.dispose();
     _searchFocusNode.dispose();
     _historyService.removeListener(_onHistoryChanged);
-    _listAnimationController.dispose();
     super.dispose();
   }
   
@@ -587,30 +574,8 @@ class _ChatSidebarState extends State<ChatSidebar> with SingleTickerProviderStat
                         itemBuilder: (context, index) {
                           final session = sessions[index];
                           final isSelected = session.id == currentSessionId;
-                          
-                          // Staggered animation for each item
-                          final animation = Tween<double>(
-                            begin: 0.0,
-                            end: 1.0,
-                          ).animate(
-                            CurvedAnimation(
-                              parent: _listAnimationController,
-                              curve: Interval(
-                                (1 / sessions.length) * index * 0.2, // Make stagger more subtle
-                                1.0,
-                                curve: Curves.easeOutCubic,
-                              ),
-                            ),
-                          );
 
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0.2, 0),
-                                end: Offset.zero,
-                              ).animate(animation),
-                              child: Dismissible(
+                          return Dismissible(
                                 key: Key(session.id),
                                 direction: DismissDirection.endToStart,
                                 background: Container(
@@ -659,11 +624,11 @@ class _ChatSidebarState extends State<ChatSidebar> with SingleTickerProviderStat
                                         ? theme.colorScheme.primary.withOpacity(0.1)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
-                                                                child: InkWell(
-                                  onTap: () {
-                                    widget.onSessionSelected(session.id);
-                                    Navigator.pop(context);
-                                  },
+                                    child: InkWell(
+                                      onTap: () {
+                                        widget.onSessionSelected(session.id);
+                                        Navigator.pop(context);
+                                      },
                                   onLongPress: () {
                                     _showSessionOptions(context, session);
                                   },
@@ -736,7 +701,6 @@ class _ChatSidebarState extends State<ChatSidebar> with SingleTickerProviderStat
                                   ),
                                 ),
                               ),
-                            ),
                           );
                         },
                       ),

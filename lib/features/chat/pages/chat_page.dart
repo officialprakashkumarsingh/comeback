@@ -16,13 +16,11 @@ import '../../../core/models/image_message_model.dart';
 import '../../../core/models/vision_message_model.dart';
 import '../../../core/models/diagram_message_model.dart';
 import '../../../core/models/presentation_message_model.dart';
-import '../../../core/models/chart_message_model.dart';
 import '../../../core/models/flashcard_message_model.dart';
 import '../../../core/models/quiz_message_model.dart';
 import '../../../core/models/vision_analysis_message_model.dart';
 import '../../../core/models/file_upload_message_model.dart';
 import '../../../core/services/diagram_service.dart';
-import '../../../core/services/chart_service.dart';
 import '../../../core/services/flashcard_service.dart';
 import '../../../core/services/quiz_service.dart';
 import '../../../core/services/auth_service.dart';
@@ -51,7 +49,6 @@ class _ChatPageState extends State<ChatPage> {
   bool _showScrollToBottom = false;
   bool _userIsScrolling = false;
   bool _autoScrollEnabled = true;
-  bool _isLoadingHistory = false;
   
   // For stopping streams
   Stream<String>? _currentStream;
@@ -89,45 +86,37 @@ class _ChatPageState extends State<ChatPage> {
   
   Future<void> _loadCurrentSession() async {
     final sessionId = ChatHistoryService.instance.currentSessionId;
-    
-    if (!_isLoadingHistory) {
-      setState(() {
-        _isLoadingHistory = true;
-      });
-      
-      try {
-        if (sessionId != null) {
-          // Load messages for existing session
-          final messages = await ChatHistoryService.instance.loadSessionMessages(sessionId);
-          if (mounted) {
-            setState(() {
-              _messages.clear();
-              _messages.addAll(messages);
-              _isLoadingHistory = false;
-            });
-            
-            // Scroll to bottom after loading messages
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_scrollController.hasClients && _messages.isNotEmpty) {
-                _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-              }
-            });
-          }
-        } else {
-          // New session - clear messages
-          if (mounted) {
-            setState(() {
-              _messages.clear();
-              _isLoadingHistory = false;
-            });
-          }
+
+    try {
+      if (sessionId != null) {
+        // Load messages for existing session
+        final messages =
+            await ChatHistoryService.instance.loadSessionMessages(sessionId);
+        if (mounted) {
+          setState(() {
+            _messages
+              ..clear()
+              ..addAll(messages);
+          });
+
+          // Scroll to bottom after loading messages
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_scrollController.hasClients && _messages.isNotEmpty) {
+              _scrollController
+                  .jumpTo(_scrollController.position.maxScrollExtent);
+            }
+          });
         }
-      } catch (e) {
-        print('Error loading session messages: $e');
-        setState(() {
-          _isLoadingHistory = false;
-        });
+      } else {
+        // New session - clear messages
+        if (mounted) {
+          setState(() {
+            _messages.clear();
+          });
+        }
       }
+    } catch (e) {
+      print('Error loading session messages: $e');
     }
   }
 
@@ -171,9 +160,9 @@ class _ChatPageState extends State<ChatPage> {
               children: [
                 // Chat messages
                 Expanded(
-                  child: _isLoadingHistory
-                      ? _buildShimmerList()
-                      : (_messages.isEmpty ? _buildEmptyState() : _buildMessagesList()),
+                  child: _messages.isEmpty
+                      ? _buildEmptyState()
+                      : _buildMessagesList(),
                 ),
 
                 // Templates quick access
@@ -189,7 +178,6 @@ class _ChatPageState extends State<ChatPage> {
               onGenerateImage: _handleImageGeneration,
               onGenerateDiagram: _handleDiagramGeneration,
               onGeneratePresentation: _handlePresentationGeneration,
-              onGenerateChart: _handleChartGeneration,
               onGenerateFlashcards: _handleFlashcardGeneration,
               onGenerateQuiz: _handleQuizGeneration,
               onVisionAnalysis: _handleVisionAnalysis,
@@ -237,27 +225,6 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       );
-      },
-    );
-  }
-
-  Widget _buildShimmerList() {
-    return ListView.builder(
-      itemCount: 6, // Show a few shimmer bubbles
-      itemBuilder: (context, index) {
-        final isUser = index % 2 != 0;
-        return Align(
-          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            width: MediaQuery.of(context).size.width * (0.5 + (index % 3) * 0.1),
-            height: 60 + (index % 3) * 20.0,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        );
       },
     );
   }
@@ -618,7 +585,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _handleSendMessage(String content) async {
+  Future<void> _handleSendMessage(String content, {String? context}) async {
     final modelService = ModelService.instance;
     
     // Determine which models to use
@@ -672,7 +639,10 @@ class _ChatPageState extends State<ChatPage> {
 
     try {
       // Handle multiple models or single model
-      String enhancedContent = content.trim();
+      String effectiveContent = content.trim();
+      if (context != null && context.isNotEmpty) {
+        effectiveContent = '$context\nUser query: $content';
+      }
       for (int i = 0; i < modelsToUse.length; i++) {
         final model = modelsToUse[i];
         
@@ -692,7 +662,7 @@ class _ChatPageState extends State<ChatPage> {
         
         // Start response for this model
         await _handleModelResponse(
-          enhancedContent,
+          effectiveContent,
           model,
           history,
           messageIndex,
@@ -1383,123 +1353,6 @@ Generate the complete presentation now:''';
     }
   }
 
-  void _handleChartGeneration(String prompt) async {
-    if (!mounted) return;
-    
-    // Add user message
-    final userMessage = Message(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      content: prompt,
-      type: MessageType.user,
-      timestamp: DateTime.now(),
-    );
-    
-    _addMessage(userMessage);
-    ChatHistoryService.instance.saveMessage(userMessage);
-    
-    // Add a placeholder message immediately
-    final assistantMessage = ChartMessage.generating(prompt);
-    _addMessage(assistantMessage);
-    
-    // Generate chart prompt
-    final chartPrompt = '''
-Generate a Chart.js configuration JSON for: $prompt
-
-Requirements:
-1. Return ONLY valid JSON configuration for Chart.js
-2. Include appropriate chart type (bar, line, pie, doughnut, radar, scatter)
-3. Use realistic sample data if not specified
-4. Include proper labels, colors, and options
-5. Make it visually appealing with good color schemes
-
-Format the response as:
-```json
-{
-  "type": "chart_type",
-  "data": { ... },
-  "options": { ... }
-}
-```
-''';
-    
-    // Stream AI response
-    String fullResponse = '';
-    
-    try {
-      // Get the selected model
-      final selectedModel = ModelService.instance.selectedModel;
-      
-      // Stream the response
-      final stream = await ApiService.sendMessage(
-        message: chartPrompt,
-        model: selectedModel,
-        conversationHistory: [],
-        systemPrompt: MessageModeService.instance.effectiveSystemPrompt,
-      );
-      
-      stream.listen(
-        (chunk) {
-          fullResponse += chunk;
-          
-          // Try to extract chart config as we stream
-          final config = ChartService.extractChartConfig(fullResponse);
-          if (config.isNotEmpty && mounted) {
-            final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
-            if (index != -1) {
-              setState(() {
-                _messages[index] = (_messages[index] as ChartMessage).copyWith(
-                  chartConfig: config,
-                  isStreaming: true,
-                );
-              });
-            }
-          }
-        },
-        onDone: () {
-          if (mounted) {
-            // Final extraction
-            String finalConfig = ChartService.extractChartConfig(fullResponse);
-            
-            // If no valid config found, generate a sample
-            if (finalConfig.isEmpty) {
-              finalConfig = ChartService.generateSampleChart(prompt);
-            }
-            
-            final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
-            if (index != -1) {
-              final updatedMessage = (_messages[index] as ChartMessage).copyWith(
-                chartConfig: finalConfig,
-                isStreaming: false,
-              );
-              setState(() {
-                _messages[index] = updatedMessage;
-              });
-              ChatHistoryService.instance.saveMessage(updatedMessage);
-            }
-          }
-        },
-        onError: (error) {
-          if (mounted) {
-            final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
-            if (index != -1) {
-              setState(() {
-                _messages[index] = (_messages[index] as ChartMessage).copyWith(hasError: true, isStreaming: false);
-              });
-            }
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
-        if (index != -1) {
-          setState(() {
-            _messages[index] = (_messages[index] as ChartMessage).copyWith(hasError: true, isStreaming: false);
-          });
-        }
-      }
-    }
-  }
 
   void _handleFlashcardGeneration(String prompt) async {
     if (!mounted) return;

@@ -251,7 +251,7 @@ class ApiService {
     while (attempts < maxAttempts) {
       try {
         final apiKey = _getCurrentBraveApiKey();
-        final url = 'https://api.search.brave.com/res/v1/web/search?q=${Uri.encodeComponent(query)}&count=25';
+        final url = 'https://api.search.brave.com/res/v1/web/search?q=${Uri.encodeComponent(query)}&count=20';
         
         final response = await http.get(
           Uri.parse(url),
@@ -317,5 +317,51 @@ class ApiService {
       print('Website scraper exception: $e');
     }
     return null;
+  }
+
+  /// Analyze a user prompt to determine if special actions are required.
+  /// Returns a map containing booleans for different generation modes.
+  static Future<Map<String, bool>> analyzePromptForActions(
+    String prompt,
+    String model,
+  ) async {
+    final selectedModel = model.isNotEmpty ? model : 'claude-3-5-sonnet';
+    final analysisPrompt = '''
+You are a classifier that decides whether a user's request needs web search, image generation, diagram generation, or presentation generation.
+Respond ONLY with a JSON object containing four boolean fields: "web_search", "image_generation", "diagram_generation", and "presentation_generation".
+
+User request: "$prompt"
+JSON:
+''';
+
+    try {
+      final stream = await sendMessage(
+        message: analysisPrompt,
+        model: selectedModel,
+      );
+      String response = '';
+      await for (final chunk in stream) {
+        response += chunk;
+      }
+      final jsonMatch = RegExp(r'\{[\s\S]*\}').stringMatch(response);
+      if (jsonMatch != null) {
+        final data = jsonDecode(jsonMatch);
+        return {
+          'web_search': data['web_search'] == true,
+          'image_generation': data['image_generation'] == true,
+          'diagram_generation': data['diagram_generation'] == true,
+          'presentation_generation':
+              data['presentation_generation'] == true,
+        };
+      }
+    } catch (e) {
+      // Ignore errors and fall back to defaults
+    }
+    return {
+      'web_search': false,
+      'image_generation': false,
+      'diagram_generation': false,
+      'presentation_generation': false,
+    };
   }
 }

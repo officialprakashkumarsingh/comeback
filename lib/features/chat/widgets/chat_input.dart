@@ -17,12 +17,11 @@ import '../../../shared/widgets/prompt_enhancer.dart';
 
 class ChatInput extends StatefulWidget {
   final TextEditingController? controller;
-  final Function(String) onSendMessage;
+  final Function(String, {String? context}) onSendMessage;
   final Function(List<String>, String)? onFileUpload; // New callback for file uploads
   final Function(String)? onGenerateImage;
   final Function(String)? onGenerateDiagram;
   final Function(String)? onGeneratePresentation;
-  final Function(String)? onGenerateChart;
   final Function(String)? onGenerateFlashcards;
   final Function(String)? onGenerateQuiz;
   final Function(String, String)? onVisionAnalysis;
@@ -40,7 +39,6 @@ class ChatInput extends StatefulWidget {
     this.onGenerateImage,
     this.onGenerateDiagram,
     this.onGeneratePresentation,
-    this.onGenerateChart,
     this.onGenerateFlashcards,
     this.onGenerateQuiz,
     this.onVisionAnalysis,
@@ -64,7 +62,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
   bool _imageGenerationMode = false;
   bool _diagramGenerationMode = false;
   bool _presentationGenerationMode = false;
-  bool _chartGenerationMode = false;
   bool _flashcardGenerationMode = false;
   bool _quizGenerationMode = false;
   bool _webSearchMode = false;
@@ -170,11 +167,41 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       // Check if there's pending image data for vision analysis
       widget.onVisionAnalysis!(message, _pendingImageData!);
       _pendingImageData = null; // Clear after use
+      return;
     } else {
       final originalQuery = message;
+      Map<String, bool> actions = {
+        'web_search': false,
+        'image_generation': false,
+        'diagram_generation': false,
+        'presentation_generation': false,
+      };
+
+      try {
+        actions = await ApiService.analyzePromptForActions(
+          originalQuery,
+          widget.selectedModel,
+        );
+      } catch (_) {}
+
+      if (actions['image_generation'] == true && widget.onGenerateImage != null) {
+        widget.onGenerateImage!(originalQuery);
+        return;
+      }
+      if (actions['diagram_generation'] == true && widget.onGenerateDiagram != null) {
+        widget.onGenerateDiagram!(originalQuery);
+        return;
+      }
+      if (actions['presentation_generation'] == true &&
+          widget.onGeneratePresentation != null) {
+        widget.onGeneratePresentation!(originalQuery);
+        return;
+      }
+
+      final bool useWebSearch = _webSearchMode || actions['web_search'] == true;
       final buffer = StringBuffer();
 
-      if (_webSearchMode) {
+      if (useWebSearch) {
         try {
           final searchData = await ApiService.searchWeb(query: message);
           final results = searchData?['web']?['results'] as List<dynamic>?;
@@ -182,10 +209,10 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
             final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
             buffer.writeln('Current date and time: $now');
             buffer.writeln('Use only the following web search results to answer:');
-            for (final result in results.take(25)) {
+            for (final result in results.take(20)) {
               final title = result['title'] ?? '';
               final url = result['url'] ?? '';
-              final snippet = result['snippet'] ?? '';
+              final snippet = result['description'] ?? '';
               buffer.writeln('- $title\n$url\n$snippet');
             }
             buffer.writeln();
@@ -208,14 +235,11 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       }
 
       if (buffer.isNotEmpty) {
-        buffer.writeln('User query: $originalQuery');
-        message = buffer.toString();
+        widget.onSendMessage(originalQuery, context: buffer.toString());
+      } else {
+        widget.onSendMessage(originalQuery);
       }
-
-      widget.onSendMessage(message);
     }
-
-    HapticFeedback.lightImpact();
   }
 
   void _handleStop() {
@@ -335,15 +359,13 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
                                       ? 'Describe the diagram you want to create...'
                                       : _presentationGenerationMode
                                           ? 'Describe the presentation topic...'
-                                          : _chartGenerationMode
-                                              ? 'Describe the chart or graph you want...'
-                                              : _flashcardGenerationMode
-                                                  ? 'What topic for flashcards?'
-                                                  : _quizGenerationMode
-                                                      ? 'What topic for the quiz?'
-                                                      : _webSearchMode
-                                                          ? 'Ask anything with web search...'
-                                                          : 'Type your message...')
+                                          : _flashcardGenerationMode
+                                              ? 'What topic for flashcards?'
+                                              : _quizGenerationMode
+                                                  ? 'What topic for the quiz?'
+                                                  : _webSearchMode
+                                                      ? 'Ask anything with web search...'
+                                                      : 'Type your message...')
                           : 'Select a model to start chatting',
                       hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
@@ -412,13 +434,11 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
                                     ? _handleDiagramGenerationDirect
                                     : (_presentationGenerationMode
                                         ? _handlePresentationGenerationDirect
-                                        : (_chartGenerationMode
-                                            ? _handleChartGenerationDirect
-                                            : (_flashcardGenerationMode
-                                                ? _handleFlashcardGenerationDirect
-                                                : (_quizGenerationMode
-                                                    ? _handleQuizGenerationDirect
-                                                    : _handleSend))))))
+                                        : (_flashcardGenerationMode
+                                            ? _handleFlashcardGenerationDirect
+                                            : (_quizGenerationMode
+                                                ? _handleQuizGenerationDirect
+                                                : _handleSend))))))
                             : null);
                     if (action != null) {
                       action();
@@ -471,7 +491,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _controller.clear();
       // Keep mode active - user must manually turn it off
       _updateSendButton();
-      HapticFeedback.lightImpact();
     }
   }
 
@@ -482,7 +501,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _controller.clear();
       // Keep mode active - user must manually turn it off
       _updateSendButton();
-      HapticFeedback.lightImpact();
     }
   }
 
@@ -493,18 +511,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _controller.clear();
       // Keep mode active - user must manually turn it off
       _updateSendButton();
-      HapticFeedback.lightImpact();
-    }
-  }
-
-  void _handleChartGenerationDirect() {
-    final prompt = _controller.text.trim();
-    if (prompt.isNotEmpty && widget.onGenerateChart != null) {
-      widget.onGenerateChart!(prompt);
-      _controller.clear();
-      // Keep mode active - user must manually turn it off
-      _updateSendButton();
-      HapticFeedback.lightImpact();
     }
   }
 
@@ -515,7 +521,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _controller.clear();
       // Keep mode active - user must manually turn it off
       _updateSendButton();
-      HapticFeedback.lightImpact();
     }
   }
 
@@ -526,7 +531,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _controller.clear();
       // Keep mode active - user must manually turn it off
       _updateSendButton();
-      HapticFeedback.lightImpact();
     }
   }
 
@@ -540,7 +544,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
         imageGenerationMode: _imageGenerationMode,
         diagramGenerationMode: _diagramGenerationMode,
         presentationGenerationMode: _presentationGenerationMode,
-        chartGenerationMode: _chartGenerationMode,
         flashcardGenerationMode: _flashcardGenerationMode,
         quizGenerationMode: _quizGenerationMode,
         webSearchMode: _webSearchMode,
@@ -561,7 +564,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
             if (enabled) {
               _diagramGenerationMode = false;
               _presentationGenerationMode = false;
-              _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
               _webSearchMode = false;
@@ -580,7 +582,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
             if (enabled) {
               _imageGenerationMode = false;
               _presentationGenerationMode = false;
-              _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
               _webSearchMode = false;
@@ -594,21 +595,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
             if (enabled) {
               _imageGenerationMode = false;
               _diagramGenerationMode = false;
-              _chartGenerationMode = false;
-              _flashcardGenerationMode = false;
-              _quizGenerationMode = false;
-              _webSearchMode = false;
-            }
-          });
-          Navigator.pop(context);
-        },
-        onChartToggle: (enabled) {
-          setState(() {
-            _chartGenerationMode = enabled;
-            if (enabled) {
-              _imageGenerationMode = false;
-              _diagramGenerationMode = false;
-              _presentationGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
               _webSearchMode = false;
@@ -623,7 +609,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _imageGenerationMode = false;
               _diagramGenerationMode = false;
               _presentationGenerationMode = false;
-              _chartGenerationMode = false;
               _quizGenerationMode = false;
               _webSearchMode = false;
             }
@@ -637,7 +622,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _imageGenerationMode = false;
               _diagramGenerationMode = false;
               _presentationGenerationMode = false;
-              _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _webSearchMode = false;
             }
@@ -651,7 +635,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
               _imageGenerationMode = false;
               _diagramGenerationMode = false;
               _presentationGenerationMode = false;
-              _chartGenerationMode = false;
               _flashcardGenerationMode = false;
               _quizGenerationMode = false;
             }
@@ -833,7 +816,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
     return _imageGenerationMode ||
            _diagramGenerationMode ||
            _presentationGenerationMode ||
-           _chartGenerationMode ||
            _flashcardGenerationMode ||
            _quizGenerationMode ||
            _webSearchMode;
@@ -844,7 +826,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _imageGenerationMode = false;
       _diagramGenerationMode = false;
       _presentationGenerationMode = false;
-      _chartGenerationMode = false;
       _flashcardGenerationMode = false;
       _quizGenerationMode = false;
       _webSearchMode = false;
@@ -864,9 +845,6 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
     }
     if (_presentationGenerationMode) {
       return Icons.slideshow_outlined;
-    }
-    if (_chartGenerationMode) {
-      return Icons.bar_chart_outlined;
     }
     if (_flashcardGenerationMode) {
       return Icons.style_outlined;
@@ -903,7 +881,6 @@ class _ExtensionsBottomSheet extends StatelessWidget {
   final bool imageGenerationMode;
   final bool diagramGenerationMode;
   final bool presentationGenerationMode;
-  final bool chartGenerationMode;
   final bool flashcardGenerationMode;
   final bool quizGenerationMode;
   final bool webSearchMode;
@@ -912,7 +889,6 @@ class _ExtensionsBottomSheet extends StatelessWidget {
   final Function(bool) onImageModeToggle;
   final Function(bool) onDiagramToggle;
   final Function(bool) onPresentationToggle;
-  final Function(bool) onChartToggle;
   final Function(bool) onFlashcardToggle;
   final Function(bool) onQuizToggle;
   final Function(bool) onWebSearchToggle;
@@ -922,7 +898,6 @@ class _ExtensionsBottomSheet extends StatelessWidget {
     required this.imageGenerationMode,
     this.diagramGenerationMode = false,
     this.presentationGenerationMode = false,
-    this.chartGenerationMode = false,
     this.flashcardGenerationMode = false,
     this.quizGenerationMode = false,
     this.webSearchMode = false,
@@ -931,7 +906,6 @@ class _ExtensionsBottomSheet extends StatelessWidget {
     required this.onImageModeToggle,
     required this.onDiagramToggle,
     required this.onPresentationToggle,
-    required this.onChartToggle,
     required this.onFlashcardToggle,
     required this.onQuizToggle,
     required this.onWebSearchToggle,
@@ -1020,7 +994,7 @@ class _ExtensionsBottomSheet extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                // Third row - Diagram, Chart, Presentation
+                // Third row - Diagram and Presentation
                 Row(
                   children: [
                     Expanded(
@@ -1030,16 +1004,6 @@ class _ExtensionsBottomSheet extends StatelessWidget {
                         subtitle: '',
                         isToggled: diagramGenerationMode,
                         onTap: () => onDiagramToggle(!diagramGenerationMode),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _ExtensionTile(
-                        icon: CupertinoIcons.chart_bar_alt_fill,
-                        title: 'Chart',
-                        subtitle: '',
-                        isToggled: chartGenerationMode,
-                        onTap: () => onChartToggle(!chartGenerationMode),
                       ),
                     ),
                     const SizedBox(width: 10),
