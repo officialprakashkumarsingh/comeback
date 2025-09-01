@@ -103,7 +103,7 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
                     children: [
                       TextSpan(
                         text: 'AhamAI',
-                        style: GoogleFonts.amaranth(
+                        style: GoogleFonts.sourceCodePro(
                           fontSize: 48,
                           fontWeight: FontWeight.w700,
                           color: colorScheme.primary,

@@ -172,9 +172,28 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _pendingImageData = null; // Clear after use
     } else {
       final originalQuery = message;
+      Map<String, bool> actions = {
+        'web_search': false,
+        'image_generation': false,
+      };
+
+      try {
+        actions = await ApiService.analyzePromptForActions(
+          originalQuery,
+          widget.selectedModel,
+        );
+      } catch (_) {}
+
+      if (actions['image_generation'] == true && widget.onGenerateImage != null) {
+        widget.onGenerateImage!(originalQuery);
+        HapticFeedback.lightImpact();
+        return;
+      }
+
+      final bool useWebSearch = _webSearchMode || actions['web_search'] == true;
       final buffer = StringBuffer();
 
-      if (_webSearchMode) {
+      if (useWebSearch) {
         try {
           final searchData = await ApiService.searchWeb(query: message);
           final results = searchData?['web']?['results'] as List<dynamic>?;
@@ -182,10 +201,10 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
             final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
             buffer.writeln('Current date and time: $now');
             buffer.writeln('Use only the following web search results to answer:');
-            for (final result in results.take(25)) {
+            for (final result in results.take(20)) {
               final title = result['title'] ?? '';
               final url = result['url'] ?? '';
-              final snippet = result['snippet'] ?? '';
+              final snippet = result['description'] ?? '';
               buffer.writeln('- $title\n$url\n$snippet');
             }
             buffer.writeln();
