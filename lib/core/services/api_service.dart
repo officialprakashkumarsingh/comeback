@@ -318,4 +318,45 @@ class ApiService {
     }
     return null;
   }
+
+  /// Analyze a user prompt to determine if special actions are required.
+  /// Returns a map containing `web_search` and `image_generation` booleans.
+  static Future<Map<String, bool>> analyzePromptForActions(
+    String prompt,
+    String model,
+  ) async {
+    final selectedModel = model.isNotEmpty ? model : 'claude-3-5-sonnet';
+    final analysisPrompt = '''
+You are a classifier that decides whether a user's request needs web search or image generation.
+Respond ONLY with a JSON object containing two boolean fields: "web_search" and "image_generation".
+
+User request: "$prompt"
+JSON:
+''';
+
+    try {
+      final stream = await sendMessage(
+        message: analysisPrompt,
+        model: selectedModel,
+      );
+      String response = '';
+      await for (final chunk in stream) {
+        response += chunk;
+      }
+      final jsonMatch = RegExp(r'\{[\s\S]*\}').stringMatch(response);
+      if (jsonMatch != null) {
+        final data = jsonDecode(jsonMatch);
+        return {
+          'web_search': data['web_search'] == true,
+          'image_generation': data['image_generation'] == true,
+        };
+      }
+    } catch (e) {
+      // Ignore errors and fall back to defaults
+    }
+    return {
+      'web_search': false,
+      'image_generation': false,
+    };
+  }
 }

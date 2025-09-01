@@ -172,9 +172,28 @@ class _ChatInputState extends State<ChatInput> with TickerProviderStateMixin {
       _pendingImageData = null; // Clear after use
     } else {
       final originalQuery = message;
+      Map<String, bool> actions = {
+        'web_search': false,
+        'image_generation': false,
+      };
+
+      try {
+        actions = await ApiService.analyzePromptForActions(
+          originalQuery,
+          widget.selectedModel,
+        );
+      } catch (_) {}
+
+      if (actions['image_generation'] == true && widget.onGenerateImage != null) {
+        widget.onGenerateImage!(originalQuery);
+        HapticFeedback.lightImpact();
+        return;
+      }
+
+      final bool useWebSearch = _webSearchMode || actions['web_search'] == true;
       final buffer = StringBuffer();
 
-      if (_webSearchMode) {
+      if (useWebSearch) {
         try {
           final searchData = await ApiService.searchWeb(query: message);
           final results = searchData?['web']?['results'] as List<dynamic>?;
